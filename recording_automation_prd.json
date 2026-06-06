@@ -1,0 +1,419 @@
+{
+  "project_name": "mac_sony_obs_recording_automation",
+  "version": "1.0.0",
+  "objective": "Build a local Mac automation app that records video using OBS Studio with a Sony camera, MacBook camera, microphone, and screen capture. The system should make recording one-click, scriptable, and reliable.",
+  "target_platform": {
+    "os": "macOS",
+    "hardware": [
+      "MacBook Pro",
+      "Sony camera connected via HDMI capture card or USB webcam mode",
+      "External microphone optional",
+      "Built-in MacBook camera optional"
+    ],
+    "required_apps": [
+      "OBS Studio"
+    ]
+  },
+  "core_stack": {
+    "language": "Python",
+    "python_version": ">=3.11",
+    "package_manager": "uv",
+    "primary_libraries": [
+      {
+        "name": "obsws-python",
+        "purpose": "Control OBS through obs-websocket"
+      },
+      {
+        "name": "pydantic",
+        "purpose": "Typed config validation"
+      },
+      {
+        "name": "typer",
+        "purpose": "CLI commands"
+      },
+      {
+        "name": "rich",
+        "purpose": "Pretty terminal output"
+      },
+      {
+        "name": "python-dotenv",
+        "purpose": "Local environment variables"
+      },
+      {
+        "name": "fastapi",
+        "purpose": "Optional local HTTP API"
+      },
+      {
+        "name": "uvicorn",
+        "purpose": "Run local API server"
+      }
+    ]
+  },
+  "important_assumptions": [
+    "OBS Studio is installed separately by the user.",
+    "Sony camera appears in OBS as a Video Capture Device through HDMI capture card or USB webcam mode.",
+    "The app controls OBS through OBS WebSocket on localhost port 4455.",
+    "The software should not directly control Sony camera settings in v1 unless a future SDK module is added.",
+    "Recording output is handled by OBS."
+  ],
+  "non_goals_v1": [
+    "Do not build a full GUI in v1.",
+    "Do not implement direct Sony SDK camera control in v1.",
+    "Do not upload videos to YouTube in v1.",
+    "Do not use cloud services.",
+    "Do not require admin privileges unless absolutely necessary."
+  ],
+  "features": {
+    "mvp": [
+      {
+        "name": "OBS connection test",
+        "description": "Connect to OBS WebSocket and verify that OBS is reachable."
+      },
+      {
+        "name": "Scene bootstrapper",
+        "description": "Create or verify core OBS scenes for recording."
+      },
+      {
+        "name": "Source verification",
+        "description": "List available OBS sources and help user map Sony camera, MacBook camera, microphone, and display capture."
+      },
+      {
+        "name": "Recording controls",
+        "description": "Start, stop, pause, resume, and check recording status."
+      },
+      {
+        "name": "Recording profiles",
+        "description": "Support named profiles such as talking_head, screen_tutorial, dual_camera, and screen_plus_camera."
+      },
+      {
+        "name": "Output folder management",
+        "description": "Save recordings into organized date-based folders."
+      },
+      {
+        "name": "Health check",
+        "description": "Verify OBS is open, websocket is available, sources exist, and output path is writable."
+      },
+      {
+        "name": "Local API server",
+        "description": "Expose endpoints for start/stop/status so future tools can control recording."
+      }
+    ],
+    "future": [
+      {
+        "name": "Sony SDK integration",
+        "description": "Add direct Sony camera control using Sony Camera Remote SDK, libsonyapi, or gphoto2 where supported."
+      },
+      {
+        "name": "Stream Deck support",
+        "description": "Add hotkey/webhook integration for physical control."
+      },
+      {
+        "name": "Auto-upload pipeline",
+        "description": "Send finished recordings to Google Drive, YouTube, or local processing queue."
+      },
+      {
+        "name": "AI post-production",
+        "description": "Transcribe, summarize, trim silence, create clips, and generate metadata."
+      }
+    ]
+  },
+  "repository_structure": {
+    "root_files": [
+      "README.md",
+      "pyproject.toml",
+      ".env.example",
+      ".gitignore",
+      "config.example.yaml"
+    ],
+    "directories": {
+      "src/recording_automation": [
+        "__init__.py",
+        "main.py",
+        "cli.py",
+        "config.py",
+        "obs_client.py",
+        "profiles.py",
+        "scenes.py",
+        "sources.py",
+        "recording.py",
+        "health.py",
+        "api.py",
+        "utils.py"
+      ],
+      "scripts": [
+        "install.sh",
+        "run_cli.sh",
+        "run_api.sh"
+      ],
+      "tests": [
+        "test_config.py",
+        "test_profiles.py",
+        "test_health.py"
+      ],
+      "docs": [
+        "OBS_SETUP.md",
+        "SONY_CAMERA_SETUP.md",
+        "TROUBLESHOOTING.md"
+      ]
+    }
+  },
+  "configuration": {
+    "env_file": ".env",
+    "env_vars": {
+      "OBS_HOST": "localhost",
+      "OBS_PORT": "4455",
+      "OBS_PASSWORD": "change_me"
+    },
+    "config_yaml_schema": {
+      "recording_root": "~/Movies/OBS_Recordings",
+      "default_profile": "talking_head",
+      "obs": {
+        "host": "localhost",
+        "port": 4455,
+        "password_env": "OBS_PASSWORD"
+      },
+      "sources": {
+        "sony_camera": "Sony Camera",
+        "macbook_camera": "MacBook Camera",
+        "microphone": "Microphone",
+        "screen_capture": "Screen Capture"
+      },
+      "profiles": {
+        "talking_head": {
+          "scene_name": "Talking Head",
+          "sources": [
+            "sony_camera",
+            "microphone"
+          ]
+        },
+        "screen_tutorial": {
+          "scene_name": "Screen Tutorial",
+          "sources": [
+            "screen_capture",
+            "microphone"
+          ]
+        },
+        "dual_camera": {
+          "scene_name": "Dual Camera",
+          "sources": [
+            "sony_camera",
+            "macbook_camera",
+            "microphone"
+          ]
+        },
+        "screen_plus_camera": {
+          "scene_name": "Screen + Camera",
+          "sources": [
+            "screen_capture",
+            "sony_camera",
+            "microphone"
+          ]
+        }
+      }
+    }
+  },
+  "cli_commands": [
+    {
+      "command": "recording-auto doctor",
+      "description": "Run full health check."
+    },
+    {
+      "command": "recording-auto obs test",
+      "description": "Test OBS websocket connection."
+    },
+    {
+      "command": "recording-auto sources list",
+      "description": "List OBS input sources."
+    },
+    {
+      "command": "recording-auto scenes list",
+      "description": "List OBS scenes."
+    },
+    {
+      "command": "recording-auto scenes bootstrap",
+      "description": "Create missing scenes from config."
+    },
+    {
+      "command": "recording-auto start --profile talking_head",
+      "description": "Switch to profile scene and start recording."
+    },
+    {
+      "command": "recording-auto stop",
+      "description": "Stop recording."
+    },
+    {
+      "command": "recording-auto pause",
+      "description": "Pause recording."
+    },
+    {
+      "command": "recording-auto resume",
+      "description": "Resume recording."
+    },
+    {
+      "command": "recording-auto status",
+      "description": "Print current recording status."
+    },
+    {
+      "command": "recording-auto api",
+      "description": "Start local FastAPI control server."
+    }
+  ],
+  "api_endpoints": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "description": "Return app and OBS health status."
+    },
+    {
+      "method": "GET",
+      "path": "/status",
+      "description": "Return recording status."
+    },
+    {
+      "method": "POST",
+      "path": "/recording/start",
+      "body": {
+        "profile": "talking_head"
+      },
+      "description": "Start recording with selected profile."
+    },
+    {
+      "method": "POST",
+      "path": "/recording/stop",
+      "description": "Stop recording."
+    },
+    {
+      "method": "POST",
+      "path": "/recording/pause",
+      "description": "Pause recording."
+    },
+    {
+      "method": "POST",
+      "path": "/recording/resume",
+      "description": "Resume recording."
+    },
+    {
+      "method": "GET",
+      "path": "/sources",
+      "description": "Return OBS source list."
+    },
+    {
+      "method": "GET",
+      "path": "/scenes",
+      "description": "Return OBS scene list."
+    }
+  ],
+  "implementation_requirements": [
+    "Use clean modular Python.",
+    "Use type hints everywhere.",
+    "Use Pydantic models for config validation.",
+    "Use Typer for CLI.",
+    "Use Rich for readable terminal output.",
+    "Use obsws-python for all OBS WebSocket calls.",
+    "Never hardcode OBS password.",
+    "Load OBS password from .env.",
+    "Fail gracefully if OBS is closed.",
+    "Fail gracefully if OBS WebSocket password is wrong.",
+    "Fail gracefully if a source or scene does not exist.",
+    "Provide useful error messages with exact fix instructions.",
+    "Create date-based output folders if possible.",
+    "Keep the system local-first and privacy-preserving."
+  ],
+  "obs_scene_requirements": {
+    "talking_head": {
+      "scene_name": "Talking Head",
+      "layout": "Sony camera full-screen with microphone audio."
+    },
+    "screen_tutorial": {
+      "scene_name": "Screen Tutorial",
+      "layout": "Screen capture full-screen with microphone audio."
+    },
+    "dual_camera": {
+      "scene_name": "Dual Camera",
+      "layout": "Sony camera primary, MacBook camera picture-in-picture."
+    },
+    "screen_plus_camera": {
+      "scene_name": "Screen + Camera",
+      "layout": "Screen capture full-screen with Sony camera picture-in-picture."
+    }
+  },
+  "testing_requirements": [
+    "Unit test config loading.",
+    "Unit test missing config fields.",
+    "Unit test profile lookup.",
+    "Mock OBS client for tests.",
+    "Do not require actual OBS connection for unit tests.",
+    "Add manual integration test instructions for OBS."
+  ],
+  "readme_requirements": [
+    "Explain what the tool does.",
+    "Explain required hardware.",
+    "Explain how to install OBS.",
+    "Explain how to enable OBS WebSocket.",
+    "Explain how to copy .env.example to .env.",
+    "Explain how to map OBS source names to config.yaml.",
+    "Explain how to run doctor command.",
+    "Explain how to start and stop recording.",
+    "Explain HDMI capture card setup.",
+    "Explain USB webcam mode setup.",
+    "Include troubleshooting section."
+  ],
+  "obs_setup_doc_requirements": [
+    "Install OBS Studio.",
+    "Open OBS.",
+    "Go to Tools > WebSocket Server Settings.",
+    "Enable WebSocket server.",
+    "Set port to 4455.",
+    "Set password.",
+    "Add Sony camera as Video Capture Device.",
+    "Add MacBook camera as Video Capture Device.",
+    "Add microphone as Audio Input Capture.",
+    "Add screen as Display Capture.",
+    "Make sure source names match config.yaml."
+  ],
+  "sony_setup_doc_requirements": [
+    "Option 1: Sony HDMI output into capture card.",
+    "Option 2: Sony USB webcam mode if camera supports it.",
+    "Set camera to clean HDMI output when using capture card.",
+    "Disable auto power off.",
+    "Use dummy battery or USB-C power for long recordings.",
+    "Set autofocus mode for video.",
+    "Set resolution and frame rate to match OBS settings.",
+    "Confirm the camera appears as a source in OBS."
+  ],
+  "acceptance_criteria": [
+    "User can run `recording-auto doctor` and receive clear pass/fail checks.",
+    "User can run `recording-auto sources list` and see OBS sources.",
+    "User can run `recording-auto scenes bootstrap` without crashing.",
+    "User can run `recording-auto start --profile talking_head` and OBS starts recording.",
+    "User can run `recording-auto stop` and OBS stops recording.",
+    "User can run local API and control recording through HTTP.",
+    "README contains complete setup instructions."
+  ],
+  "claude_code_instructions": {
+    "mode": "implementation",
+    "instructions": [
+      "Create the full repository from this specification.",
+      "Do not create placeholder-only files.",
+      "Implement working Python modules.",
+      "Write complete CLI commands.",
+      "Write complete config models.",
+      "Write OBS client wrapper.",
+      "Write FastAPI server.",
+      "Write useful README and setup docs.",
+      "Use robust exception handling.",
+      "Add tests that can run without OBS installed.",
+      "Return a final summary of files created and exact commands to run."
+    ]
+  },
+  "recommended_commands_after_generation": [
+    "uv sync",
+    "cp .env.example .env",
+    "cp config.example.yaml config.yaml",
+    "recording-auto doctor",
+    "recording-auto sources list",
+    "recording-auto scenes bootstrap",
+    "recording-auto start --profile talking_head",
+    "recording-auto stop"
+  ]
+}

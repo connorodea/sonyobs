@@ -1,0 +1,51 @@
+# Copy this file to config.yaml and adjust source/scene names to match what you set up in OBS.
+
+# Root folder where OBS recordings are stored. The app will create date-based subfolders.
+# Use ~ for your home directory. On macOS the OBS default is ~/Movies.
+recording_root: "~/Movies/OBS_Recordings"
+
+# Default profile used when `recording-auto start` is invoked with no --profile flag.
+default_profile: "talking_head"
+
+# OBS WebSocket connection. The password is read from the env var named in password_env.
+obs:
+  host: "localhost"
+  port: 4455
+  password_env: "OBS_PASSWORD"
+
+# Map the logical source names this app uses to the OBS source names you created.
+# These must match the input names you see in OBS exactly (case-sensitive).
+sources:
+  sony_camera: "Sony Camera"
+  macbook_camera: "MacBook Camera"
+  microphone: "Microphone"
+  screen_capture: "Screen Capture"
+
+# Recording profiles. Each profile maps to an OBS scene and lists the logical sources
+# (from the `sources` block above) that the scene should contain.
+profiles:
+  talking_head:
+    scene_name: "Talking Head"
+    sources:
+      - sony_camera
+      - microphone
+
+  screen_tutorial:
+    scene_name: "Screen Tutorial"
+    sources:
+      - screen_capture
+      - microphone
+
+  dual_camera:
+    scene_name: "Dual Camera"
+    sources:
+      - sony_camera
+      - macbook_camera
+      - microphone
+
+  screen_plus_camera:
+    scene_name: "Screen + Camera"
+    sources:
+      - screen_capture
+      - sony_camera
+      - microphone

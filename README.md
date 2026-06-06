@@ -22,15 +22,23 @@ After install you can call it from any directory. Three names all do the same th
 
 The most useful commands:
 
-* `sonyobs go` — **one-keystroke**: switch to the default profile's scene and start recording
-* `sonyobs stop` — stop recording
-* `sonyobs doctor` — prove the whole pipeline works before you press record
-* `sonyobs sony scan` — find the Sony RX100 (USB Streaming or Imaging Edge Webcam) and any HDMI capture card
-* `sonyobs sony connect` — bind the detected Sony device to its OBS source
-* `sonyobs scenes bootstrap` — create the OBS scenes the profiles expect
-* `sonyobs start --profile talking_head` — explicit profile selection
-* `sonyobs pause` / `resume` / `status`
-* `sonyobs api` — local FastAPI server with the same controls over HTTP
+* `sonyobs go` — **one-keystroke**: switch to the default profile's scene, start recording, attach a live dashboard. Ctrl+C to stop.
+* `sonyobs go --for 5m` — record for exactly 5 minutes, auto-stop.
+* `sonyobs go --detached` — start and return immediately (no dashboard).
+* `sonyobs watch` — attach the live dashboard to whatever OBS is already recording.
+* `sonyobs stop` — stop recording.
+* `sonyobs clip "intro-take-3"` — stop AND rename the last file with a label.
+* `sonyobs recent` — list the most recent recordings with size + age.
+* `sonyobs doctor` — prove the whole pipeline works before you press record.
+* `sonyobs sony scan` / `sony connect` — find the RX100 and bind it to OBS.
+* `sonyobs scenes bootstrap` — create the OBS scenes the profiles expect.
+* `sonyobs start -p screen_tutorial` — explicit profile selection (no dashboard).
+* `sonyobs pause` / `resume` / `status` (add `--json` for machine output).
+* `sonyobs api` — local FastAPI server with the same controls over HTTP.
+
+The `go`, `watch`, `stop`, and error paths fire **native macOS notifications**
+(silenceable with `--no-notify`). Anything that hits OBS over WebSocket shows
+a **dots spinner** while it connects.
 
 ---
 
@@ -126,18 +134,26 @@ You want every check `pass`. If anything fails, the `hint` column tells you the 
 ## Daily use
 
 ```bash
-# the fast path
-sonyobs go            # switch to default profile + start recording
-sonyobs stop          # done
+# the fast path — attaches a live dashboard; Ctrl+C stops cleanly
+sonyobs go
 
-# explicit profile
+# record for exactly 5 minutes, auto-stop, label the file "demo"
+sonyobs go --for 5m
+sonyobs clip demo
+
+# different profile, no dashboard
 sonyobs start -p screen_tutorial
 sonyobs stop
 
-# pause / resume / status
+# attach the dashboard to a recording that's already running
+sonyobs watch
+
+# pause / resume / status / browse old files
 sonyobs pause
 sonyobs resume
 sonyobs status
+sonyobs recent
+sonyobs status --json   # for scripting
 
 # Sony RX100 helpers
 sonyobs sony scan
@@ -147,6 +163,20 @@ sonyobs sony connect
 sonyobs scenes bootstrap
 sonyobs scenes list
 ```
+
+### The live dashboard
+
+When you run `sonyobs go` (without `--detached`), you get a Rich `Live`
+panel that polls OBS twice a second and shows:
+
+* `● REC` / `⏸ PAUSED` state with color
+* the OBS timecode (HH:MM:SS)
+* the current scene + profile
+* total bytes written and a rolling write rate (MB/s)
+* a remaining countdown if you used `--for`
+
+Ctrl+C stops the recording and gives you a "recording finished" summary
+with the output path, duration, and stop reason.
 
 ### Available profiles (from `config.yaml`)
 

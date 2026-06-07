@@ -12,6 +12,7 @@ from rich.table import Table
 from rich.text import Text
 
 from . import __version__, state
+from .autosetup import AutosetupResult, run_autosetup
 from .config import AppConfig, ConfigError, load_config
 from .dashboard import DashboardResult, run_dashboard
 from .health import run_doctor
@@ -676,6 +677,77 @@ def scenes_list(config: Optional[Path] = CONFIG_OPT) -> None:
     for name in scenes:
         table.add_row(name, "★" if name == current else "")
     console.print(table)
+
+
+@app.command()
+def autosetup(config: Optional[Path] = CONFIG_OPT) -> None:
+    """Auto-create missing OBS inputs + scenes and wire them together.
+
+    Idempotent. Picks compatible input kinds for this OBS version, creates each
+    missing input with default settings, then makes sure every scene contains
+    the sources its profile lists. Open OBS afterwards and pick the actual
+    device for each video input in the Properties panel.
+    """
+    cfg = _load(config)
+    client = _obs(cfg)
+    try:
+        with spinner(console, "Configuring OBS scenes + inputs"):
+            result = run_autosetup(client, cfg)
+    finally:
+        client.close()
+
+    # ─── inputs ─────────────────────────────────────────────────────────────
+    inputs_table = Table(title="inputs", expand=True)
+    inputs_table.add_column("name")
+    inputs_table.add_column("kind")
+    inputs_table.add_column("status")
+    for ci in result.inputs:
+        status = "already existed" if ci.already_existed else "[green]created[/]"
+        inputs_table.add_row(ci.name, ci.kind, status)
+    console.print(inputs_table)
+
+    if result.skipped_inputs:
+        body = "\n".join(f"  - [bold]{n}[/]: {why}" for n, why in result.skipped_inputs)
+        console.print(
+            Panel(
+                f"{Icons.WARN} Skipped inputs:\n{body}",
+                title="skipped",
+                border_style="yellow",
+            )
+        )
+
+    # ─── scenes ─────────────────────────────────────────────────────────────
+    scenes_table = Table(title="scenes", expand=True)
+    scenes_table.add_column("scene")
+    scenes_table.add_column("created")
+    scenes_table.add_column("added items", overflow="fold")
+    scenes_table.add_column("already present", overflow="fold")
+    for sc in result.scenes:
+        scenes_table.add_row(
+            sc.scene_name,
+            "[green]yes[/]" if sc.created_scene else "no",
+            ", ".join(sc.added_items) or "—",
+            ", ".join(sc.already_present) or "—",
+        )
+    console.print(scenes_table)
+
+    dir_line = (
+        f"recording directory: [bold]{result.record_directory}[/]\n\n"
+        if result.record_directory
+        else ""
+    )
+    console.print(
+        Panel(
+            f"{Icons.OK} OBS is wired up.\n\n"
+            f"{dir_line}"
+            "Next:\n"
+            "  1. Open OBS and click each Video Capture input → Properties → pick the actual device.\n"
+            "  2. `sonyobs doctor` to confirm all checks pass.\n"
+            "  3. `sonyobs go` to start recording.",
+            title="autosetup complete",
+            border_style="green",
+        )
+    )
 
 
 @scenes_app.command("bootstrap")

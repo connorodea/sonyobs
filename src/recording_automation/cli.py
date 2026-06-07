@@ -1,6 +1,7 @@
-"""Typer CLI entrypoint: `recording-auto <command>`."""
+"""Typer CLI entrypoint: `sonyobs <command>` (also `sob`, `recording-auto`)."""
 from __future__ import annotations
 
+import json as json_lib
 from pathlib import Path
 from typing import Optional
 
@@ -10,8 +11,9 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from . import __version__
+from . import __version__, state
 from .config import AppConfig, ConfigError, load_config
+from .dashboard import DashboardResult, run_dashboard
 from .health import run_doctor
 from .obs_client import (
     OBSAuthError,
@@ -28,9 +30,20 @@ from .recording import (
     status as recording_status,
     stop_recording,
 )
+from .recordings import find_recent, humanize_age
 from .scenes import bootstrap_scenes
 from .sony_camera import connect_rx100_to_obs, find_sony_rx100, scan_cameras
 from .sources import list_inputs
+from .ui import (
+    Icons,
+    banner_panel,
+    fmt_bytes,
+    fmt_duration,
+    notify,
+    parse_duration,
+    spinner,
+    state_label,
+)
 
 console = Console()
 err_console = Console(stderr=True)
@@ -73,10 +86,14 @@ def _load(config_path: Optional[Path]) -> AppConfig:
         raise typer.Exit(code=2)
 
 
-def _obs(cfg: AppConfig) -> OBSClient:
+def _obs(cfg: AppConfig, *, quiet: bool = False) -> OBSClient:
     client = OBSClient(cfg.obs)
     try:
-        client.connect()
+        if quiet:
+            client.connect()
+        else:
+            with spinner(console, f"Connecting to OBS at {cfg.obs.host}:{cfg.obs.port}"):
+                client.connect()
     except OBSConnectionError as exc:
         err_console.print(Panel(str(exc), title="OBS not reachable", border_style="red"))
         raise typer.Exit(code=3)
@@ -90,19 +107,20 @@ def _obs(cfg: AppConfig) -> OBSClient:
 
 
 def _print_status(status, *, scene_name: str | None = None) -> None:
-    state = "RECORDING" if status.active else "stopped"
-    if status.paused:
-        state = "PAUSED"
-    color = "green" if status.active and not status.paused else (
-        "yellow" if status.paused else "white"
-    )
-    table = Table.grid(padding=(0, 1))
-    table.add_row(Text("state", style="bold"), Text(state, style=color))
-    table.add_row("timecode", status.timecode or "—")
-    table.add_row("bytes", f"{status.bytes:,}")
+    table = Table.grid(padding=(0, 2))
+    table.add_column(style="dim", justify="right", min_width=10)
+    table.add_column(style="bold")
+    table.add_row("state", state_label(status.active, status.paused))
+    table.add_row("timecode", Text(status.timecode or "—"))
+    table.add_row("size", Text(fmt_bytes(status.bytes)))
     if scene_name:
-        table.add_row("scene", scene_name)
-    console.print(Panel(table, title="recording status", border_style="cyan"))
+        table.add_row("scene", Text(scene_name))
+    border = (
+        "red" if status.active and not status.paused
+        else "yellow" if status.paused
+        else "grey50"
+    )
+    console.print(Panel(table, title="recording status", border_style=border))
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +147,7 @@ def _root(
     ),
 ) -> None:
     if ctx.invoked_subcommand is None:
+        console.print(banner_panel())
         console.print(ctx.get_help())
         raise typer.Exit()
 
@@ -212,9 +231,25 @@ def go(
         "-p",
         help="Profile to record. Defaults to config.default_profile.",
     ),
+    duration: Optional[str] = typer.Option(
+        None,
+        "--for",
+        "-d",
+        help="Auto-stop after this duration (e.g. 5m, 1h30m, 90, 0:30).",
+    ),
+    detached: bool = typer.Option(
+        False,
+        "--detached",
+        help="Don't attach the live dashboard — start and return immediately.",
+    ),
+    quiet_notify: bool = typer.Option(
+        False,
+        "--no-notify",
+        help="Suppress macOS start/stop notifications.",
+    ),
     config: Optional[Path] = CONFIG_OPT,
 ) -> None:
-    """One-keystroke start: switch scene + start recording with the default profile."""
+    """One-keystroke start. Attaches a live dashboard until Ctrl+C (or --detached)."""
     cfg = _load(config)
     chosen = profile or cfg.default_profile
     if chosen not in cfg.profiles:
@@ -227,6 +262,17 @@ def go(
             )
         )
         raise typer.Exit(code=2)
+
+    deadline_seconds: int | None = None
+    if duration:
+        try:
+            deadline_seconds = parse_duration(duration)
+        except ValueError as exc:
+            err_console.print(
+                Panel(str(exc), title="bad --for value", border_style="red")
+            )
+            raise typer.Exit(code=2)
+
     client = _obs(cfg)
     try:
         try:
@@ -234,24 +280,118 @@ def go(
         except OBSNotFoundError as exc:
             err_console.print(Panel(str(exc), title="scene missing", border_style="red"))
             raise typer.Exit(code=6)
+
+        state.record_started(result.profile, result.scene_name)
+        if not quiet_notify:
+            notify(
+                "sonyobs · recording",
+                f"{result.profile} → {result.scene_name}",
+                sound="Tink",
+            )
+
         if result.missing_sources:
             console.print(
                 Panel(
-                    "Recording started, but missing in OBS:\n  - "
+                    f"{Icons.WARN} Started, but these sources are missing in OBS:\n  - "
                     + "\n  - ".join(result.missing_sources),
                     title="warning",
                     border_style="yellow",
                 )
             )
-        else:
+
+        if detached:
             console.print(
                 Panel(
-                    f"[bold green]REC[/]  profile=[bold]{result.profile}[/]  "
+                    f"{Icons.REC} REC  profile=[bold]{result.profile}[/]  "
                     f"scene=[bold]{result.scene_name}[/]",
-                    border_style="green",
+                    border_style="red",
                 )
             )
-        _print_status(result.status, scene_name=result.scene_name)
+            if deadline_seconds is not None:
+                console.print(
+                    f"[dim]Note: --for is ignored in --detached mode. "
+                    f"Use `sonyobs watch` to attach later.[/]"
+                )
+            _print_status(result.status, scene_name=result.scene_name)
+            return
+
+        dash = run_dashboard(
+            console,
+            client,
+            profile=result.profile,
+            scene=result.scene_name,
+            deadline_seconds=deadline_seconds,
+        )
+        _summarize_dashboard(dash, profile=result.profile, scene=result.scene_name,
+                              notify_enabled=not quiet_notify)
+    finally:
+        client.close()
+
+
+def _summarize_dashboard(
+    dash: DashboardResult,
+    *,
+    profile: str,
+    scene: str,
+    notify_enabled: bool,
+) -> None:
+    reason_label = {
+        "user": "stopped (Ctrl+C)",
+        "deadline": "stopped (auto-stop deadline)",
+        "obs_stopped": "OBS stopped recording",
+        "error": "stopped on error",
+    }.get(dash.reason, dash.reason)
+
+    if dash.reason == "error":
+        err_console.print(
+            Panel(dash.error or "unknown error",
+                  title="dashboard error", border_style="red")
+        )
+
+    state.record_finished(dash.output_path)
+
+    body = Table.grid(padding=(0, 2))
+    body.add_column(style="dim", justify="right", min_width=10)
+    body.add_column(style="bold")
+    body.add_row("reason", reason_label)
+    body.add_row("profile", profile)
+    body.add_row("scene", scene)
+    body.add_row("duration", fmt_duration(dash.elapsed_seconds))
+    if dash.output_path:
+        body.add_row("file", str(dash.output_path))
+    console.print(Panel(body, title=f"{Icons.OK} recording finished", border_style="green"))
+
+    if notify_enabled:
+        notify(
+            "sonyobs · stopped",
+            f"{fmt_duration(dash.elapsed_seconds)} · {profile}",
+            sound="Glass",
+        )
+
+
+@app.command()
+def watch(config: Optional[Path] = CONFIG_OPT) -> None:
+    """Attach the live dashboard to whatever OBS is currently recording."""
+    cfg = _load(config)
+    client = _obs(cfg)
+    try:
+        status = client.get_record_status()
+        if not status.active:
+            console.print(
+                Panel(
+                    "OBS is not recording. Start one with `sonyobs go`.",
+                    title="nothing to watch",
+                    border_style="yellow",
+                )
+            )
+            return
+        scene = client.current_scene() or "?"
+        last = state.last_recording() or {}
+        profile = last.get("profile", "?")
+        dash = run_dashboard(
+            console, client, profile=profile, scene=scene, deadline_seconds=None
+        )
+        _summarize_dashboard(dash, profile=profile, scene=scene, notify_enabled=True)
     finally:
         client.close()
 
@@ -317,14 +457,154 @@ def resume(config: Optional[Path] = CONFIG_OPT) -> None:
 
 
 @app.command()
-def status(config: Optional[Path] = CONFIG_OPT) -> None:
+def status(
+    config: Optional[Path] = CONFIG_OPT,
+    json: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+) -> None:
     """Print OBS recording status."""
+    cfg = _load(config)
+    client = _obs(cfg, quiet=json)
+    try:
+        st = recording_status(client)
+        scene = client.current_scene()
+    finally:
+        client.close()
+    if json:
+        typer.echo(
+            json_lib.dumps(
+                {
+                    "active": st.active,
+                    "paused": st.paused,
+                    "timecode": st.timecode,
+                    "bytes": st.bytes,
+                    "scene": scene,
+                },
+                indent=2,
+            )
+        )
+        return
+    _print_status(st, scene_name=scene)
+
+
+@app.command()
+def recent(
+    config: Optional[Path] = CONFIG_OPT,
+    limit: int = typer.Option(10, "--limit", "-n", help="Max files to show."),
+    json: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+) -> None:
+    """List the most recent recordings under config.recording_root."""
+    cfg = _load(config)
+    root = cfg.recording_root_path
+    rows = find_recent(root, limit=limit)
+
+    if json:
+        typer.echo(
+            json_lib.dumps(
+                [
+                    {
+                        "name": r.name,
+                        "path": str(r.path),
+                        "size_bytes": r.size_bytes,
+                        "modified_at": r.modified_at.isoformat(timespec="seconds"),
+                        "age_seconds": r.age_seconds,
+                    }
+                    for r in rows
+                ],
+                indent=2,
+            )
+        )
+        return
+
+    if not rows:
+        console.print(
+            Panel(
+                f"No video files found under {root}.\n"
+                "Either you haven't recorded yet, or OBS is saving somewhere else "
+                "(check OBS → Settings → Output → Recording → Recording Path).",
+                title="no recordings",
+                border_style="yellow",
+            )
+        )
+        return
+
+    table = Table(title=f"recent recordings · {root}", expand=True)
+    table.add_column("#", justify="right", style="dim", width=3)
+    table.add_column("file", overflow="fold")
+    table.add_column("size", justify="right")
+    table.add_column("when", justify="right", style="cyan")
+    for i, rec in enumerate(rows, start=1):
+        try:
+            rel = rec.path.relative_to(root)
+        except ValueError:
+            rel = rec.path
+        table.add_row(str(i), str(rel), fmt_bytes(rec.size_bytes),
+                      humanize_age(rec.age_seconds))
+    console.print(table)
+
+
+@app.command()
+def clip(
+    label: str = typer.Argument(..., help="Label to append to the latest recording filename."),
+    config: Optional[Path] = CONFIG_OPT,
+) -> None:
+    """Stop OBS (if recording) and rename the latest file with a label.
+
+    The new filename is `<original-stem>__<label>.<ext>`. Whitespace in the
+    label is replaced with hyphens.
+    """
     cfg = _load(config)
     client = _obs(cfg)
     try:
-        _print_status(recording_status(client))
+        st = recording_status(client)
+        stop_path: str | None = None
+        if st.active:
+            stop_path = client.stop_recording()
+            state.record_finished(stop_path)
     finally:
         client.close()
+
+    candidate: Path | None = None
+    if stop_path:
+        candidate = Path(stop_path).expanduser()
+    elif (last := state.last_recording()) and last.get("output_path"):
+        candidate = Path(last["output_path"]).expanduser()
+    else:
+        rows = find_recent(cfg.recording_root_path, limit=1)
+        if rows:
+            candidate = rows[0].path
+
+    if candidate is None or not candidate.exists():
+        err_console.print(
+            Panel(
+                "Could not find a recent recording to rename.\n"
+                "OBS may not have flushed the file yet — wait a couple of seconds "
+                "and try `sonyobs recent` to confirm.",
+                title="no file to clip",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(code=10)
+
+    clean = "-".join(label.split())
+    new_name = f"{candidate.stem}__{clean}{candidate.suffix}"
+    new_path = candidate.with_name(new_name)
+    try:
+        candidate.rename(new_path)
+    except OSError as exc:
+        err_console.print(
+            Panel(f"Rename failed: {exc}", title="clip failed", border_style="red")
+        )
+        raise typer.Exit(code=11)
+
+    console.print(
+        Panel(
+            f"{Icons.OK} {candidate.name}\n   {Icons.ARROW} {new_path.name}\n"
+            f"[dim]{new_path.parent}[/]",
+            title="clipped",
+            border_style="green",
+        )
+    )
+    state.record_finished(str(new_path))
 
 
 @app.command(name="api")
@@ -486,9 +766,30 @@ def profiles_list(config: Optional[Path] = CONFIG_OPT) -> None:
 
 
 @sony_app.command("scan")
-def sony_scan() -> None:
+def sony_scan(
+    json: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+) -> None:
     """Scan this Mac for Sony cameras and HDMI capture cards."""
     cams = scan_cameras()
+    if json:
+        typer.echo(
+            json_lib.dumps(
+                [
+                    {
+                        "name": c.name,
+                        "source": c.source,
+                        "vendor_id": c.vendor_id,
+                        "product_id": c.product_id,
+                        "is_sony": c.is_sony,
+                        "is_rx100": c.is_rx100,
+                        "is_capture_card": c.is_capture_card,
+                    }
+                    for c in cams
+                ],
+                indent=2,
+            )
+        )
+        return
     if not cams:
         console.print(
             Panel(

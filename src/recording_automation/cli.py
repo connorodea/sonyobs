@@ -154,6 +154,19 @@ def _root(
 
 
 @app.command()
+def menubar() -> None:
+    """Launch the macOS menu bar app (statusbar item)."""
+    try:
+        from .menubar import run as run_menubar
+    except RuntimeError as exc:
+        err_console.print(
+            Panel(str(exc), title="menubar dependency missing", border_style="red")
+        )
+        raise typer.Exit(code=2)
+    run_menubar()
+
+
+@app.command()
 def doctor(config: Optional[Path] = CONFIG_OPT) -> None:
     """Run the full health check."""
     report = run_doctor(config)

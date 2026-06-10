@@ -35,6 +35,7 @@ The most useful commands:
 * `sonyobs start -p screen_tutorial` — explicit profile selection (no dashboard).
 * `sonyobs pause` / `resume` / `status` (add `--json` for machine output).
 * `sonyobs api` — local FastAPI server with the same controls over HTTP.
+* `sonyobs menubar` — launch the macOS menu bar app (see [Menu bar app](#menu-bar-app) below).
 
 The `go`, `watch`, `stop`, and error paths fire **native macOS notifications**
 (silenceable with `--no-notify`). Anything that hits OBS over WebSocket shows
@@ -245,6 +246,48 @@ curl -s -X POST http://127.0.0.1:8765/recording/start \
 
 ---
 
+## Menu bar app
+
+A `rumps`-powered macOS menu bar item exposes the same controls as the CLI,
+with a live `● REC HH:MM:SS` title that updates every ~1.5s.
+
+### Run from the terminal
+
+```bash
+# one-time: pull in the menu bar dependency
+uv sync --extra menubar
+
+# launch the status item — stays running until you choose Quit
+sonyobs menubar
+```
+
+### Build a real `.app` bundle
+
+```bash
+./scripts/build_app.sh
+open dist/SonyOBS.app                 # launch in place
+cp -R dist/SonyOBS.app /Applications/  # install
+```
+
+The bundle is unsigned, so first launch needs a right-click → **Open** to clear
+Gatekeeper. The app has `LSUIElement = true` set — no Dock icon, menu bar only.
+
+### What's in the menu
+
+* **State line** — live `● Recording  00:01:23  ·  142.3 MB` / `⏸ Paused` / `○ Idle` / `⚠ OBS not reachable`
+* **Go (default profile)** — start the configured `default_profile`
+* **Start with profile…** — submenu of every profile in `config.yaml`
+* **Pause / Resume / Stop**
+* **Recent recordings** — last 8 files; click to reveal in Finder
+* **Open OBS Studio** / **Open recordings folder**
+* **Run Doctor** — same checks as `sonyobs doctor`, results shown in a dialog
+* **Preferences** — open `config.yaml`, `.env`, or reload config
+
+Status polling and actions all go through the same orchestration functions as
+the CLI; there's no duplicate business logic.
+
+---
+
 ## HDMI capture card setup
 
 * Set the camera to **clean HDMI output** (no overlays, no autofocus boxes).
@@ -299,8 +342,12 @@ src/recording_automation/
   recording.py       # start/stop/pause/resume orchestration
   health.py          # `doctor` checks
   api.py             # FastAPI server
+  menubar.py         # macOS menu bar app (rumps)
+  _app_entry.py      # py2app entry for the .app bundle
   sony_camera.py     # RX100 detection / quick-connect
   utils.py
+setup.py             # py2app bundler (separate from pyproject)
+scripts/build_app.sh # builds dist/SonyOBS.app
 scripts/
   install.sh
   run_cli.sh

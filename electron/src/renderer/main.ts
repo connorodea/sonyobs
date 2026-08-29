@@ -71,6 +71,30 @@ async function refreshServices(): Promise<void> {
   }
 }
 
+function setEditCell(id: string, text: string, state: "ok" | "unknown" | "red"): void {
+  const cell = $(id);
+  cell.textContent = text;
+  cell.className = `pill ${state}`;
+}
+
+async function refreshEditStatus(): Promise<void> {
+  try {
+    const { openRouter } = await window.sonyobs.getKeysPresent();
+    setEditCell("#er-key", openRouter ? "key saved" : "no key yet", openRouter ? "ok" : "unknown");
+  } catch { /* sidecar down — keep as-is */ }
+  try {
+    const map = (await window.sonyobs.servicesStatus()) as Record<string, { running: boolean; port: number }>;
+    const od = map.opendesign;
+    const oh = map.openhands;
+    if (od) setEditCell("#od-row", od.running ? `up :${od.port}` : "stopped", od.running ? "ok" : "unknown");
+    if (oh) setEditCell("#oh-row", oh.running ? `up :${oh.port}` : "stopped", oh.running ? "ok" : "unknown");
+  } catch {
+    setEditCell("#od-row", "stopped", "red");
+    setEditCell("#oh-row", "stopped", "red");
+  }
+  setEditCell("#cr-row", "not wired", "unknown");
+}
+
 async function refreshKeys(): Promise<void> {
   try {
     const { openRouter, deepgram } = await window.sonyobs.getKeysPresent();
@@ -162,6 +186,20 @@ function wireButtons(): void {
   $("#oh-stop").addEventListener("click", () => window.sonyobs.serviceStop("openhands").then(refreshServices));
   $("#od-open").addEventListener("click", () => openExternal("http://127.0.0.1:7456"));
   $("#oh-open").addEventListener("click", () => openExternal("http://127.0.0.1:3000"));
+  $("#btn-fabric-run").addEventListener("click", async () => {
+    const pattern = ($("#fabric-pattern") as HTMLInputElement).value.trim();
+    const promptEl = ($("#fabric-prompt") as HTMLTextAreaElement).value;
+    const prompt = promptEl.trim();
+    if (!pattern) return;
+    const out = $("#fabric-out");
+    out.textContent = "running…";
+    try {
+      const res = await window.sonyobs.runFabric(pattern, prompt);
+      out.textContent = res.ok ? (res.output ?? "(no output)") : `error: ${res.error ?? "unknown"}`;
+    } catch (e) {
+      out.textContent = `error: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  });
 }
 
 function openExternal(url: string): void {
@@ -179,7 +217,7 @@ async function boot(): Promise<void> {
     };
     setPill((map[state] as "ok" | "warn" | "red") ?? "unknown", `sidecar ${state}`);
   });
-  await Promise.all([refreshStatus(), refreshProfiles(), refreshScenes(), refreshServices(), refreshKeys()]);
+  await Promise.all([refreshStatus(), refreshProfiles(), refreshScenes(), refreshServices(), refreshKeys(), refreshEditStatus()]);
   setInterval(() => { refreshStatus(); refreshScenes(); }, 3000);
 }
 

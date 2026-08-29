@@ -59,6 +59,9 @@ const api = {
 
   serviceStop: (id: string): Promise<void> =>
     ipcRenderer.invoke("services:stop", id),
+
+  runFabric: (pattern: string, prompt: string): Promise<{ ok: boolean; output?: string; error?: string }> =>
+    ipcRenderer.invoke("edit:runFabric", pattern, prompt),
 };
 
 contextBridge.exposeInMainWorld("sonyobs", api);

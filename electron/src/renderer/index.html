@@ -44,10 +44,20 @@
       <h3>AI video editing panel</h3>
       <p>Backends route through one orchestrator (wiring lands with the agent loop milestone).</p>
       <table id="edit-status">
-        <tr><th>OpenRouter</th><td class="unknown">no key yet</td></tr>
-        <tr><th>Claude Code</th><td class="ok">ready</td></tr>
-        <tr><th>Cutroom engine</th><td class="unknown">not wired</td></tr>
+        <tr><th>OpenRouter</th><td id="er-key" class="unknown">no key yet</td></tr>
+        <tr><th>OpenDesign</th><td id="od-row" class="unknown">checking…</td></tr>
+        <tr><th>OpenHands</th><td id="oh-row" class="unknown">checking…</td></tr>
+        <tr><th>Cutroom engine</th><td id="cr-row" class="unknown">not wired</td></tr>
       </table>
+    </div>
+    <div class="card">
+      <h3>Run a Fabric pattern</h3>
+      <label>Pattern name</label>
+      <input id="fabric-pattern" placeholder="pattern name, e.g. extract_wisdom">
+      <label>Prompt</label>
+      <textarea id="fabric-prompt" rows="3" placeholder="input for the pattern…"></textarea>
+      <div class="row"><button id="btn-fabric-run">Run pattern</button></div>
+      <pre id="fabric-out" class="wide"></pre>
     </div>
   </section>
 

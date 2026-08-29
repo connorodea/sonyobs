@@ -134,6 +134,36 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("services:stop", (_event, id: ServiceId) => compose.down(id));
+
+  ipcMain.handle("edit:runFabric", async (_event, pattern: string, prompt: string) => {
+    try {
+      const status = await compose.up("fabric");
+      if (typeof status.detail === "string" && /error/i.test(status.detail)) throw new Error(status.detail);
+      const dir = repoRootFor("fabric");
+      let bin = path.join(dir, "fabric");
+      if (!existsSync(bin)) bin = path.join(dir, "bin", "fabric");
+      if (!existsSync(bin)) {
+        if (!existsSync(path.join(dir, "go.mod"))) throw new Error("fabric clone present but no go.mod buildable CLI — read its README for the run command");
+        bin = path.join(os.tmpdir(), "sonyobs-fabric");
+        await execCapture("go", ["build", "-o", bin, "."], { cwd: dir, timeout: 240000 });
+      }
+      const out = await execCapture(bin, ["-p", pattern, "-s", prompt], { cwd: dir, timeout: 120000 });
+const capped = out.length > 4000 ? `${out.slice(0, 4000)}\n\u2026[truncated]` : out;
+      return { ok: true, output: capped };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { ok: false, error: msg };
+    }
+  });
+}
+
+function execCapture(file: string, args: string[], opts: { cwd: string; timeout: number }): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(file, args, { cwd: opts.cwd, timeout: opts.timeout, maxBuffer: 16 * 1024 * 1024, killSignal: "SIGKILL" }, (err, stdout) => {
+      if (err) reject(err);
+      else resolve(stdout.trim());
+    });
+  });
 }
 
 app.whenReady().then(() => {

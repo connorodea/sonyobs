@@ -92,7 +92,10 @@ async function refreshEditStatus(): Promise<void> {
     setEditCell("#od-row", "stopped", "red");
     setEditCell("#oh-row", "stopped", "red");
   }
-  setEditCell("#cr-row", "not wired", "unknown");
+  try {
+    const cs = await window.sonyobs.cutroomStatus();
+    if (cs) setEditCell("#cr-row", cs.available ? `up${cs.keyPresent ? " · key ok" : ""}` : "no server", cs.available ? "ok" : "unknown");
+  } catch { setEditCell("#cr-row", "no server", "unknown"); }
 }
 
 async function refreshKeys(): Promise<void> {
@@ -195,6 +198,18 @@ function wireButtons(): void {
     out.textContent = "running…";
     try {
       const res = await window.sonyobs.runFabric(pattern, prompt);
+      out.textContent = res.ok ? (res.output ?? "(no output)") : `error: ${res.error ?? "unknown"}`;
+    } catch (e) {
+      out.textContent = `error: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  });
+$("#btn-cutroom-run").addEventListener("click", async () => {
+    const prompt = ($("#cutroom-prompt") as HTMLTextAreaElement).value;
+    if (!prompt) return;
+    const out = $("#cutroom-out");
+    out.textContent = "running…";
+    try {
+      const res = await window.sonyobs.runCutroom(prompt);
       out.textContent = res.ok ? (res.output ?? "(no output)") : `error: ${res.error ?? "unknown"}`;
     } catch (e) {
       out.textContent = `error: ${e instanceof Error ? e.message : String(e)}`;

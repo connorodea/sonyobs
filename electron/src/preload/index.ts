@@ -62,6 +62,10 @@ const api = {
 
   runFabric: (pattern: string, prompt: string): Promise<{ ok: boolean; output?: string; error?: string }> =>
     ipcRenderer.invoke("edit:runFabric", pattern, prompt),
+  cutroomStatus: (): Promise<{ available: boolean; health?: string; keyPresent?: boolean; detail?: string }> =>
+    ipcRenderer.invoke("edit:cutroomStatus"),
+  runCutroom: (prompt: string): Promise<{ ok: boolean; output?: string; error?: string }> =>
+    ipcRenderer.invoke("edit:runCutroom", prompt),
 };
 
 contextBridge.exposeInMainWorld("sonyobs", api);

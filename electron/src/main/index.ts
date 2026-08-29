@@ -157,6 +157,40 @@ const capped = out.length > 4000 ? `${out.slice(0, 4000)}\n\u2026[truncated]` : 
   });
 }
 
+ipcMain.handle("edit:cutroomStatus", async () => {
+  const port = Number(process.env.CUTROOM_PORT ?? 8787);
+  const url = `http://127.0.0.1:${port}/health`;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(1500) });
+    if (res.ok) {
+      const body = (await res.json()) as { keyPresent?: boolean };
+      return { available: true, health: "ok", keyPresent: Boolean(body.keyPresent), detail: "" };
+    }
+    return { available: false, health: `http ${res.status}`, detail: "" };
+  } catch (err) {
+    return { available: false, health: "", detail: "cutroom server not running; start it via ~/Developer/cutroom: pnpm --filter @cutroom/server dev" };
+  }
+});
+
+ipcMain.handle("edit:runCutroom", async (_event, prompt: string) => {
+  const port = Number(process.env.CUTROOM_PORT ?? 8787);
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/agent/plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+      signal: AbortSignal.timeout(120000),
+    });
+    if (!res.ok) return { ok: false, error: `cutroom plan http ${res.status}` };
+    const text = await res.text();
+    const capped = text.length > 4000 ? `${text.slice(0, 4000)}\n…[truncated]` : text;
+    return { ok: true, output: capped };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: `cutroom call failed: ${msg}` };
+  }
+});
+
 function execCapture(file: string, args: string[], opts: { cwd: string; timeout: number }): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(file, args, { cwd: opts.cwd, timeout: opts.timeout, maxBuffer: 16 * 1024 * 1024, killSignal: "SIGKILL" }, (err, stdout) => {

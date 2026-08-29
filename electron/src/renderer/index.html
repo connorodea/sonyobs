@@ -1,0 +1,85 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8">
+<title>SonyOBS Studio</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<div id="bar">
+  <h1>SonyOBS Studio</h1>
+  <nav>
+    <button data-tab="capture" class="active">Capture</button>
+    <button data-tab="edit">AI Edit</button>
+    <button data-tab="agents">Agents</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+  <span id="pill" class="pill unknown">sidecar …</span>
+</div>
+
+<main>
+  <!-- Capture -->
+  <section id="tab-capture" class="tab">
+    <div class="row">
+      <label>Profile</label>
+      <select id="profile"><option value="">—</option></select>
+      <button id="btn-start">Start</button>
+      <button id="btn-stop">Stop</button>
+      <button id="btn-pause">Pause</button>
+      <button id="btn-resume">Resume</button>
+    </div>
+    <div class="grid">
+      <div class="card" id="rec-status"><h3>Status</h3><pre>—</pre></div>
+      <div class="card" id="rec-scene"><h3>Scene</h3><pre>—</pre></div>
+      <div class="card" id="rec-meta"><h3>Profile</h3><pre>—</pre></div>
+    </div>
+    <div class="row">
+      <button id="btn-scan">Scan Sony</button>
+      <button id="btn-refresh">Refresh</button>
+    </div>
+    <div class="card wide"><h3>Scenes</h3><pre id="scenes"></pre></div>
+  </section>
+
+  <!-- AI Edit -->
+  <section id="tab-edit" class="tab hidden">
+    <div class="card">
+      <h3>AI video editing panel</h3>
+      <p>Backends route through one orchestrator (wiring lands with the agent loop milestone).</p>
+      <table id="edit-status">
+        <tr><th>OpenRouter</th><td class="unknown">no key yet</td></tr>
+        <tr><th>Claude Code</th><td class="ok">ready</td></tr>
+        <tr><th>Cutroom engine</th><td class="unknown">not wired</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- Agents -->
+  <section id="tab-agents" class="tab hidden">
+    <div class="card">
+      <h3>OpenDesign (docker sidecar)</h3>
+      <p id="od-status">checking…</p>
+      <div class="row"><button id="od-start">Start</button><button id="od-stop">Stop</button><button id="od-open">Open</button></div>
+    </div>
+    <div class="card">
+      <h3>OpenHands (docker sidecar)</h3>
+      <p id="oh-status">checking…</p>
+      <div class="row"><button id="oh-start">Start</button><button id="oh-stop">Stop</button><button id="oh-open">Open</button></div>
+    </div>
+  </section>
+
+  <!-- Settings -->
+  <section id="tab-settings" class="tab hidden">
+    <div class="card">
+      <h3>API keys (stored in macOS Keychain)</h3>
+      <label>OpenRouter API key</label>
+      <input id="key-or" type="password" placeholder="sk-or-…">
+      <button id="save-or">Save</button>
+      <span id="or-present" class="pill">absent</span>
+      <label>Deepgram API key (optional)</label>
+      <input id="key-dg" type="password" placeholder="deepgram-…">
+      <button id="save-dg">Save</button>
+      <span id="dg-present" class="pill">absent</span>
+      <div class="row"><button id="clear-keys" class="danger">Clear all keys</button></div>
+    </div>
+  </section>
+</main>
+<script type="module" src="./main.ts"></script>
+</body></html>

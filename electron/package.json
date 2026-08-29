@@ -1,0 +1,50 @@
+{
+  "name": "sonyobs-electron",
+  "version": "1.0.0",
+  "description": "SonyOBS Studio — desktop capture + AI video production",
+  "main": "out/main/index.js",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit",
+    "package": "electron-vite build && electron-builder --mac",
+    "start": "electron-vite preview"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^4.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "electron": "^37.0.0",
+    "electron-builder": "^26.0.0",
+    "electron-vite": "^4.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^7.0.0"
+  },
+  "build": {
+    "appId": "com.upscaledinc.sonyobs",
+    "productName": "SonyOBS Studio",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.video",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": ""
+      }
+    ]
+  }
+}

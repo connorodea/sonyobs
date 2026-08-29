@@ -164,6 +164,21 @@ def recording_resume() -> dict[str, Any]:
     return {"status": _status_dict(status)}
 
 
+@app.get("/profiles")
+def profiles_route() -> dict[str, Any]:
+    cfg = _config()
+    return {
+        "profiles": [
+            {
+                "name": name,
+                "scene": profile.scene_name,
+                "sources": profile.sources,
+            }
+            for name, profile in sorted(cfg.profiles.items())
+        ]
+    }
+
+
 @app.get("/sources")
 def sources_route() -> dict[str, Any]:
     cfg = _config()
